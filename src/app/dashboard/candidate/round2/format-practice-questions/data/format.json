@@ -1,0 +1,41 @@
+{
+  "title": "Format",
+  "description": "Coding question in Java code with solving bugs and implementation of the methods.",
+  "details": [
+    {
+      "label": "Duration",
+      "value": "25-30 minutes"
+    },
+    {
+      "label": "Questions",
+      "value": "1"
+    },
+    {
+      "label": "Difficulty",
+      "value": "Medium"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Instructions",
+      "items": [
+        {
+          "label": "Language",
+          "value": "Java"
+        },
+        {
+          "label": "Part-1",
+          "value": "Identify the bug, fix the code and explain the change. Once we solved the bug, then only proctor will move to the next part."
+        },
+        {
+          "label": "Part-2",
+          "value": "Once the bug is fixed, implement the required methods."
+        },
+        {
+          "label": "Part-3",
+          "value": "Once the methods are implemented, we need to implement another implementation."
+        }
+      ]
+    }
+  ]
+}
