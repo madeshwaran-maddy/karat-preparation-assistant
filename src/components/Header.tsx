@@ -118,24 +118,12 @@ export default function Header({ screenName }: HeaderProps) {
                     <div className="py-2">
                       <button
                         onClick={() => {
-                          router.push(
-                            candidate.role === "candidate"
-                              ? "/dashboard/candidate"
-                              : "/dashboard/reviewer",
-                          );
+                          router.push("/dashboard");
                           setIsDropdownOpen(false);
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
                       >
                         Dashboard
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
-                      >
-                        Profile Settings
                       </button>
                     </div>
 

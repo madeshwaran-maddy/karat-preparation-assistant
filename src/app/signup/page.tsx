@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -11,7 +11,27 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (countdown === null) {
+      return;
+    }
+
+    if (countdown === 0) {
+      router.push("/login?signup=success");
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCountdown((currentCountdown) =>
+        currentCountdown === null ? null : currentCountdown - 1
+      );
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [countdown, router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -34,8 +54,7 @@ export default function SignupPage() {
         return;
       }
 
-      // Redirect to login page after successful signup
-      router.push("/login?signup=success");
+      setCountdown(10);
     } catch (err) {
       setError("An error occurred during signup");
       console.error(err);
@@ -60,7 +79,17 @@ export default function SignupPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {countdown !== null ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-900">
+            <p className="font-semibold">
+              Kindly don&apos;t login until you get a confirmation from your lead.
+            </p>
+            <p className="mt-2">
+              Page will be diverted to login page after {countdown} seconds.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <input
               type="text"
@@ -101,7 +130,8 @@ export default function SignupPage() {
           >
             {loading ? "Creating Account..." : "Create Account"}
           </button>
-        </form>
+          </form>
+        )}
 
         <div className="mt-6 text-center">
           <p className="text-gray-600">

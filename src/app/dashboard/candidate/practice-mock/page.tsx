@@ -1,9 +1,9 @@
 "use client";
 
-import Editor from "@monaco-editor/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
+import JavaCodeEditor from "@/components/JavaCodeEditor";
 import practiceQuestionsData from "./data/practice-questions.json";
 
 interface PracticeQuestion {
@@ -62,12 +62,14 @@ export default function PracticeMockPage() {
   const [round1Timers, setRound1Timers] = useState<number[]>([]);
   const [round2TimeLeft, setRound2TimeLeft] = useState(ROUND2_TIME);
   const [editorCode, setEditorCode] = useState(defaultJavaTemplate);
+  const [userAnalysis, setUserAnalysis] = useState("");
   const [runStatus, setRunStatus] = useState("Idle");
   const [runResult, setRunResult] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [submittedRound1Questions, setSubmittedRound1Questions] = useState<boolean[]>([]);
   const [isRound2Submitted, setIsRound2Submitted] = useState(false);
-  const editorRef = useRef<any>(null);
+  const round1SubmitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
+  const round2SubmitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const questionIdMapRef = useRef<Map<string, string>>(new Map());
   const assessmentCreatedRef = useRef(false);
   const router = useRouter();
@@ -95,7 +97,7 @@ export default function PracticeMockPage() {
           difficulty: question.difficulty,
           description: roundNumber === 1 ? (question as PracticeQuestion).task : (question as ExerciseQuestion).description || (question as ExerciseQuestion).prompt,
           code: roundNumber === 1 ? (question as PracticeQuestion).buggyCode : (question as ExerciseQuestion).starterCode,
-          subtopic: question.title,
+          subtopic: roundNumber === 2 ? `Question ${(question as ExerciseQuestion).number}` : question.title,
           question_no: "questionNo" in question ? question.questionNo : question.number,
         }),
       });
@@ -282,6 +284,10 @@ export default function PracticeMockPage() {
     setEditorCode(round2ActiveQuestion?.starterCode || defaultJavaTemplate);
   }, [selectedRound, round1ActiveQuestion, round2ActiveQuestion]);
 
+  useEffect(() => {
+    setUserAnalysis("");
+  }, [selectedRound, selectedRound1Index, round1ActiveQuestion, round2ActiveQuestion]);
+
   const displayTitle = activeQuestion?.title || "Loading question...";
   const description =
     selectedRound === 1
@@ -297,11 +303,6 @@ export default function PracticeMockPage() {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  };
-
-  const handleEditorMount = (editor: any) => {
-    editorRef.current = editor;
-    editor.focus();
   };
 
   const handleRunCode = async () => {
@@ -321,7 +322,7 @@ export default function PracticeMockPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sourceCode: editorCode, languageId: 62 }),
+        body: JSON.stringify({ sourceCode: editorCode, languageId: 5 }),
       });
 
       const data = await response.json();
@@ -348,27 +349,6 @@ export default function PracticeMockPage() {
 
   const currentRound1Submitted = submittedRound1Questions[selectedRound1Index] ?? false;
 
-  const handleBackToLearning = async () => {
-    if (assessmentId) {
-      try {
-        await fetch("/api/assessments", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            assessment_id: assessmentId,
-            status: "completed",
-          }),
-        });
-      } catch (error) {
-        console.error("Failed to mark assessment as completed:", error);
-      }
-    }
-
-    router.push("/dashboard/candidate/round2");
-  };
-
   const handleRound1Submit = async () => {
     if (currentRound1Submitted) {
       return;
@@ -379,7 +359,7 @@ export default function PracticeMockPage() {
       await persistQuestionRecord(activeQuestionForSubmit, 1);
       const questionId = questionIdMapRef.current.get(`${assessmentId}-1-${activeQuestionForSubmit.questionNo}`);
       if (questionId) {
-        await saveEvaluationRecord(questionId, editorCode, "");
+        await saveEvaluationRecord(questionId, editorCode, userAnalysis);
       }
     }
 
@@ -428,6 +408,26 @@ export default function PracticeMockPage() {
     setRunResult("Your Round 2 answer has been submitted.");
   };
 
+  round1SubmitHandlerRef.current = handleRound1Submit;
+  round2SubmitHandlerRef.current = handleRound2Submit;
+
+  useEffect(() => {
+    const activeTimeLeft = round1Timers[selectedRound1Index] ?? ROUND1_QUESTION_TIME;
+    if (selectedRound !== 1 || !round1ActiveQuestion || currentRound1Submitted || activeTimeLeft !== 0) {
+      return;
+    }
+
+    void round1SubmitHandlerRef.current();
+  }, [selectedRound, round1ActiveQuestion, round1Timers, selectedRound1Index, currentRound1Submitted]);
+
+  useEffect(() => {
+    if (selectedRound !== 2 || !round2ActiveQuestion || isRound2Submitted || round2TimeLeft !== 0) {
+      return;
+    }
+
+    void round2SubmitHandlerRef.current();
+  }, [selectedRound, round2ActiveQuestion, isRound2Submitted, round2TimeLeft]);
+
   if (loading && round1Questions.length === 0) {
     return (
       <>
@@ -446,13 +446,6 @@ export default function PracticeMockPage() {
       <div className="min-h-screen bg-[#edf0f2] px-6 py-8 text-slate-800 antialiased">
         <div className="mb-8 flex items-center justify-between gap-4">
           <h1 className="text-3xl font-bold text-slate-700">Practice Mock Assessment</h1>
-          <button
-            type="button"
-            onClick={() => void handleBackToLearning()}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
-          >
-            Back to Round 2 Learning
-          </button>
         </div>
 
         <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6">
@@ -548,24 +541,26 @@ export default function PracticeMockPage() {
                 </div>
 
                 <div className="h-[420px] w-full bg-[#1b2941]">
-                  <Editor
-                    height="420px"
-                    language="java"
-                    theme="vs-dark"
+                  <JavaCodeEditor
                     value={editorCode}
-                    onMount={handleEditorMount}
-                    onChange={(value: string | undefined) => setEditorCode(value ?? "")}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 15,
-                      automaticLayout: true,
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                      lineNumbersMinChars: 3,
-                      padding: { top: 16, bottom: 16 },
-                    }}
+                    onChange={setEditorCode}
                   />
                 </div>
+
+                {selectedRound === 1 && (
+                  <div className="mt-4 rounded-lg border border-slate-600 bg-slate-800 p-4">
+                    <label htmlFor="round1-analysis" className="mb-2 block text-sm font-semibold text-slate-200">
+                      Your analysis
+                    </label>
+                    <textarea
+                      id="round1-analysis"
+                      value={userAnalysis}
+                      onChange={(event) => setUserAnalysis(event.target.value)}
+                      placeholder="Explain the bug and your fix..."
+                      className="min-h-28 w-full resize-y rounded-md border border-slate-500 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-400 focus:border-blue-400"
+                    />
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   {selectedRound === 1 ? (

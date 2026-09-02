@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       return Number.isFinite(itemQuestionNo) && itemQuestionNo > max ? itemQuestionNo : max;
     }, 0) ?? 0;
 
-    const nextQuestionNo = Math.max(Number(question_no ?? 0), maxQuestionNo + 1);
+    const nextQuestionNo = maxQuestionNo + 1;
     const now = new Date().toISOString();
     const question = {
       id: crypto.randomUUID(),

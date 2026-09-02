@@ -64,7 +64,9 @@ export default function DebuggingDrillPage() {
   const [timeLeft, setTimeLeft] = useState(4 * 60);
   const [isLocked, setIsLocked] = useState(false);
   const [timerPaused, setTimerPaused] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [assessmentId, setAssessmentId] = useState<string | null>(null);
+  const submitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const questionIdMapRef = useRef<Map<string, string>>(new Map());
   const createdAssessmentRef = useRef(false);
   const createdQuestionKeysRef = useRef<Set<string>>(new Set());
@@ -130,6 +132,7 @@ export default function DebuggingDrillPage() {
       setTimeLeft(4 * 60);
       setIsLocked(false);
       setTimerPaused(false);
+      setSubmitted(false);
       return;
     }
 
@@ -138,6 +141,7 @@ export default function DebuggingDrillPage() {
     setTimeLeft(4 * 60);
     setIsLocked(true);
     setTimerPaused(false);
+    setSubmitted(false);
   }, [selectedQuestion]);
 
   useEffect(() => {
@@ -203,6 +207,14 @@ export default function DebuggingDrillPage() {
     return () => window.clearInterval(timer);
   }, [selectedQuestion, timerPaused]);
 
+  useEffect(() => {
+    if (timeLeft !== 0 || !selectedQuestion || timerPaused) {
+      return;
+    }
+
+    void submitHandlerRef.current();
+  }, [timeLeft, selectedQuestion, timerPaused]);
+
   const handleBackToLearning = async () => {
     if (assessmentId) {
       try {
@@ -225,7 +237,7 @@ export default function DebuggingDrillPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedTopic || !selectedQuestion || !candidate || !assessmentId) {
+    if (submitted || !selectedTopic || !selectedQuestion || !candidate || !assessmentId) {
       return;
     }
 
@@ -258,7 +270,10 @@ export default function DebuggingDrillPage() {
 
     setTimerPaused(true);
     setIsLocked(false);
+    setSubmitted(true);
   };
+
+  submitHandlerRef.current = handleSubmit;
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
@@ -446,10 +461,16 @@ export default function DebuggingDrillPage() {
                       <button
                         type="button"
                         onClick={handleSubmit}
-                        className="rounded-lg bg-blue-600 px-5 py-2.5 text-base font-semibold text-white transition hover:bg-blue-700"
+                        disabled={submitted}
+                        className="rounded-lg bg-blue-600 px-5 py-2.5 text-base font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Submit
+                        {submitted ? "Submitted" : "Submit"}
                       </button>
+                      {submitted && (
+                        <p className="mt-3 text-sm font-semibold text-green-700">
+                          Question is submitted.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </>

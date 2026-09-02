@@ -15,9 +15,17 @@ const LEGACY_EXERCISE_PATH = path.join(
 
 const CANDIDATE_EXERCISE_PATHS = [PRACTICE_MOCK_EXERCISE_PATH, LEGACY_EXERCISE_PATH];
 
+function getColumnValue(row: Record<string, unknown>, columnName: string) {
+  const matchingKey = Object.keys(row).find(
+    (key) => key.trim().toLowerCase() === columnName.toLowerCase()
+  );
+
+  return matchingKey ? row[matchingKey] : undefined;
+}
+
 function normalizeQuestion(row: Record<string, unknown>, index: number) {
   const title =
-    String(row["Title"] ?? row["Question Title"] ?? row["Question"] ?? "Question") ||
+    String(getColumnValue(row, "Title") ?? `Question ${index + 1}`) ||
     `Question ${index + 1}`;
 
   const prompt = String(

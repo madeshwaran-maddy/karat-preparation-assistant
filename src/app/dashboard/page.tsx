@@ -41,6 +41,8 @@ export default function DashboardPage() {
     return null;
   }
 
+  const isReviewer = candidate.role.toLowerCase() === "reviewer";
+
   return (
     <>
       <Header screenName="Role Based Landing Page" />
@@ -87,8 +89,11 @@ export default function DashboardPage() {
           </Link>
 
           {/* Leads/Reviewer Card */}
-          <Link href="/dashboard/reviewer">
-            <div className="group border-2 border-blue-500 rounded-2xl p-8 hover:shadow-lg transition duration-300 cursor-pointer bg-white">
+          <div className={`group border-2 border-blue-500 rounded-2xl p-8 transition duration-300 bg-white ${
+            isReviewer ? "cursor-pointer hover:shadow-lg" : "cursor-not-allowed opacity-50"
+          }`}>
+            {isReviewer ? (
+              <Link href="/dashboard/reviewer" className="block">
               <div className="flex flex-col items-center text-center">
                 <div className="mb-6">
                   <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition duration-300">
@@ -111,8 +116,20 @@ export default function DashboardPage() {
                   Continue
                 </button>
               </div>
-            </div>
-          </Link>
+              </Link>
+            ) : (
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-6">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-2xl font-bold text-blue-600">R</span>
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">For Leads / Reviewer</h3>
+                <p className="text-gray-600 mb-6">Reviewer access is restricted to reviewer accounts.</p>
+                <span className="block w-full rounded-lg bg-blue-300 py-3 text-center font-bold text-white">Unavailable</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Info Message */}

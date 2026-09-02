@@ -6,7 +6,7 @@ import crypto from "crypto";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { candidate_id, round } = body;
+    const { candidate_id, round, interviewer_name } = body;
 
     if (!candidate_id || round === undefined || round === null) {
       return NextResponse.json(
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       created_at: now,
       completed_at: null,
       updated_at: now,
-      interviewer_name: "",
+      interviewer_name: typeof interviewer_name === "string" ? interviewer_name.trim() : "",
     };
 
     await dynamodb.send(

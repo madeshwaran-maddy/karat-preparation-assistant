@@ -26,6 +26,35 @@ export const dynamodb =
   DynamoDBDocumentClient.from(client);
 
 // Table creation functions
+export async function createCandidatesTable() {
+  const params: CreateTableCommandInput = {
+    TableName: "candidates",
+    KeySchema: [{ AttributeName: "id", KeyType: "HASH" as KeyType }],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "S" as ScalarAttributeType },
+      { AttributeName: "email", AttributeType: "S" as ScalarAttributeType },
+    ],
+    BillingMode: "PAY_PER_REQUEST" as BillingMode,
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "email-index",
+        KeySchema: [{ AttributeName: "email", KeyType: "HASH" as KeyType }],
+        Projection: { ProjectionType: "ALL" as ProjectionType },
+      },
+    ],
+  };
+
+  try {
+    await client.send(new CreateTableCommand(params));
+    console.log("Candidates table created successfully");
+  } catch (error: any) {
+    if (error.name !== "ResourceInUseException") {
+      console.error("Error creating candidates table:", error);
+      throw error;
+    }
+  }
+}
+
 export async function createAssessmentsTable() {
   const params: CreateTableCommandInput = {
     TableName: "assessments",
@@ -131,12 +160,39 @@ export async function createEvaluationsTable() {
   }
 }
 
+export async function createLearningProgressTable() {
+  const params: CreateTableCommandInput = {
+    TableName: "learning_progress",
+    KeySchema: [
+      { AttributeName: "user_id", KeyType: "HASH" as KeyType },
+      { AttributeName: "item_key", KeyType: "RANGE" as KeyType },
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "user_id", AttributeType: "S" as ScalarAttributeType },
+      { AttributeName: "item_key", AttributeType: "S" as ScalarAttributeType },
+    ],
+    BillingMode: "PAY_PER_REQUEST" as BillingMode,
+  };
+
+  try {
+    await client.send(new CreateTableCommand(params));
+    console.log("Learning progress table created successfully");
+  } catch (error: any) {
+    if (error.name !== "ResourceInUseException") {
+      console.error("Error creating learning progress table:", error);
+      throw error;
+    }
+  }
+}
+
 // Initialize all tables
 export async function initializeTables() {
   try {
+    await createCandidatesTable();
     await createAssessmentsTable();
     await createQuestionsTable();
     await createEvaluationsTable();
+    await createLearningProgressTable();
     console.log("All tables initialized successfully");
   } catch (error) {
     console.error("Error initializing tables:", error);

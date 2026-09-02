@@ -10,6 +10,7 @@ interface Candidate {
   name: string;
   email: string;
   role: string;
+  mock_enabled?: boolean;
 }
 
 export default function Round1Page() {
@@ -38,6 +39,8 @@ export default function Round1Page() {
   if (!candidate) {
     return null;
   }
+
+  const isMockEnabled = candidate.mock_enabled === true;
 
   const sections = [
     {
@@ -92,11 +95,16 @@ export default function Round1Page() {
               Practice Mock Assessment
               </button>
             </Link>
-            <Link href="/dashboard/candidate/mock-assessment" className="block">
-              <button className="w-full text-left px-4 py-3 rounded-lg font-medium text-gray-700 hover:bg-gray-100 transition duration-200">
+            <button
+              type="button"
+              onClick={() => isMockEnabled && router.push("/dashboard/candidate/mock-assessment")}
+              disabled={!isMockEnabled}
+              className={`w-full text-left px-4 py-3 rounded-lg font-medium transition duration-200 disabled:cursor-not-allowed ${
+                isMockEnabled ? "text-gray-700 hover:bg-gray-100" : "cursor-not-allowed text-gray-400"
+              }`}
+            >
               Mock Assessment
-              </button>
-            </Link>
+            </button>
           </nav>
         </div>
 

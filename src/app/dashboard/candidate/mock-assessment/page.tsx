@@ -1,9 +1,9 @@
 "use client";
 
-import Editor from "@monaco-editor/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
+import JavaCodeEditor from "@/components/JavaCodeEditor";
 import practiceQuestionsData from "./data/practice-questions.json";
 
 interface PracticeQuestion {
@@ -67,7 +67,11 @@ export default function PracticeMockPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [submittedRound1Questions, setSubmittedRound1Questions] = useState<boolean[]>([]);
   const [isRound2Submitted, setIsRound2Submitted] = useState(false);
-  const editorRef = useRef<any>(null);
+  const [interviewerName, setInterviewerName] = useState("");
+  const [isStartModalOpen, setIsStartModalOpen] = useState(true);
+  const [startingAssessment, setStartingAssessment] = useState(false);
+  const round1SubmitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
+  const round2SubmitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const questionIdMapRef = useRef<Map<string, string>>(new Map());
   const assessmentCreatedRef = useRef(false);
   const router = useRouter();
@@ -95,7 +99,7 @@ export default function PracticeMockPage() {
           difficulty: question.difficulty,
           description: roundNumber === 1 ? (question as PracticeQuestion).task : (question as ExerciseQuestion).description || (question as ExerciseQuestion).prompt,
           code: roundNumber === 1 ? (question as PracticeQuestion).buggyCode : (question as ExerciseQuestion).starterCode,
-          subtopic: question.title,
+          subtopic: roundNumber === 2 ? `Question ${(question as ExerciseQuestion).number}` : question.title,
           question_no: "questionNo" in question ? question.questionNo : question.number,
         }),
       });
@@ -141,45 +145,57 @@ export default function PracticeMockPage() {
       return;
     }
 
-    const initializeAssessment = async () => {
-      const candidateData = localStorage.getItem("candidate");
-      if (!candidateData) {
-        router.push("/login");
-        return;
-      }
+    const candidateData = localStorage.getItem("candidate");
+    if (!candidateData) {
+      router.push("/login");
+      return;
+    }
 
-      const parsedCandidate = JSON.parse(candidateData) as { id: string; name: string; email: string; role: string };
-      setCandidate(parsedCandidate);
-      assessmentCreatedRef.current = true;
-
-      try {
-        const response = await fetch("/api/assessments", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            candidate_id: parsedCandidate.id,
-            round: 4,
-          }),
-        });
-
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data?.error || "Unable to create assessment record");
-        }
-
-        setAssessmentId(data.assessment.id);
-      } catch (error) {
-        console.error("Failed to create assessment record:", error);
-        setRunStatus(error instanceof Error ? error.message : "Failed to create assessment record");
-      }
-    };
-
-    void initializeAssessment();
+    setCandidate(JSON.parse(candidateData) as { id: string; name: string; email: string; role: string });
   }, [router]);
 
+  const handleStartAssessment = async () => {
+    const trimmedInterviewerName = interviewerName.trim();
+    if (!candidate || !trimmedInterviewerName || startingAssessment) {
+      return;
+    }
+
+    setStartingAssessment(true);
+
+    try {
+      const response = await fetch("/api/assessments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidate_id: candidate.id,
+          round: 4,
+          interviewer_name: trimmedInterviewerName,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to create assessment record");
+      }
+
+      assessmentCreatedRef.current = true;
+      setAssessmentId(data.assessment.id);
+      setIsStartModalOpen(false);
+    } catch (error) {
+      console.error("Failed to create assessment record:", error);
+      setRunStatus(error instanceof Error ? error.message : "Failed to create assessment record");
+    } finally {
+      setStartingAssessment(false);
+    }
+  };
+
   useEffect(() => {
+    if (!assessmentId) {
+      return;
+    }
+
     const timer = window.setInterval(() => {
       if (selectedRound === 1) {
         if (submittedRound1Questions[selectedRound1Index]) {
@@ -202,7 +218,7 @@ export default function PracticeMockPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [selectedRound, selectedRound1Index, submittedRound1Questions, isRound2Submitted]);
+  }, [assessmentId, selectedRound, selectedRound1Index, submittedRound1Questions, isRound2Submitted]);
 
   useEffect(() => {
     const randomQuestions = shuffleList(round1QuestionPool).slice(0, 4);
@@ -299,11 +315,6 @@ export default function PracticeMockPage() {
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   };
 
-  const handleEditorMount = (editor: any) => {
-    editorRef.current = editor;
-    editor.focus();
-  };
-
   const handleRunCode = async () => {
     if (!editorCode.trim()) {
       setRunStatus("No code to run");
@@ -321,7 +332,7 @@ export default function PracticeMockPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sourceCode: editorCode, languageId: 62 }),
+        body: JSON.stringify({ sourceCode: editorCode, languageId: 5 }),
       });
 
       const data = await response.json();
@@ -347,27 +358,6 @@ export default function PracticeMockPage() {
   };
 
   const currentRound1Submitted = submittedRound1Questions[selectedRound1Index] ?? false;
-
-  const handleBackToLearning = async () => {
-    if (assessmentId) {
-      try {
-        await fetch("/api/assessments", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            assessment_id: assessmentId,
-            status: "completed",
-          }),
-        });
-      } catch (error) {
-        console.error("Failed to mark assessment as completed:", error);
-      }
-    }
-
-    router.push("/dashboard/candidate/round2");
-  };
 
   const handleRound1Submit = async () => {
     if (currentRound1Submitted) {
@@ -428,6 +418,26 @@ export default function PracticeMockPage() {
     setRunResult("Your Round 2 answer has been submitted.");
   };
 
+  round1SubmitHandlerRef.current = handleRound1Submit;
+  round2SubmitHandlerRef.current = handleRound2Submit;
+
+  useEffect(() => {
+    const activeTimeLeft = round1Timers[selectedRound1Index] ?? ROUND1_QUESTION_TIME;
+    if (selectedRound !== 1 || !round1ActiveQuestion || currentRound1Submitted || activeTimeLeft !== 0) {
+      return;
+    }
+
+    void round1SubmitHandlerRef.current();
+  }, [selectedRound, round1ActiveQuestion, round1Timers, selectedRound1Index, currentRound1Submitted]);
+
+  useEffect(() => {
+    if (selectedRound !== 2 || !round2ActiveQuestion || isRound2Submitted || round2TimeLeft !== 0) {
+      return;
+    }
+
+    void round2SubmitHandlerRef.current();
+  }, [selectedRound, round2ActiveQuestion, isRound2Submitted, round2TimeLeft]);
+
   if (loading && round1Questions.length === 0) {
     return (
       <>
@@ -443,16 +453,43 @@ export default function PracticeMockPage() {
     <>
       <Header screenName="Mock Assessment" />
 
+      {isStartModalOpen && candidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-2xl font-bold text-slate-800">Start Mock Assessment</h2>
+            <p className="mt-2 text-sm text-slate-600">Enter the interviewer name to begin the assessment.</p>
+            <label htmlFor="interviewer-name" className="mt-5 block text-sm font-semibold text-slate-700">
+              Interviewer Name
+            </label>
+            <input
+              id="interviewer-name"
+              type="text"
+              value={interviewerName}
+              onChange={(event) => setInterviewerName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void handleStartAssessment();
+                }
+              }}
+              autoFocus
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              placeholder="Enter interviewer name"
+            />
+            <button
+              type="button"
+              onClick={() => void handleStartAssessment()}
+              disabled={!interviewerName.trim() || startingAssessment}
+              className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {startingAssessment ? "Starting..." : "Start Assessment"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-screen bg-[#edf0f2] px-6 py-8 text-slate-800 antialiased">
         <div className="mb-8 flex items-center justify-between gap-4">
           <h1 className="text-3xl font-bold text-slate-700">Mock Assessment</h1>
-          <button
-            type="button"
-            onClick={() => void handleBackToLearning()}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
-          >
-            Back to Round 2 Learning
-          </button>
         </div>
 
         <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6">
@@ -548,22 +585,9 @@ export default function PracticeMockPage() {
                 </div>
 
                 <div className="h-[420px] w-full bg-[#1b2941]">
-                  <Editor
-                    height="420px"
-                    language="java"
-                    theme="vs-dark"
+                  <JavaCodeEditor
                     value={editorCode}
-                    onMount={handleEditorMount}
-                    onChange={(value: string | undefined) => setEditorCode(value ?? "")}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 15,
-                      automaticLayout: true,
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                      lineNumbersMinChars: 3,
-                      padding: { top: 16, bottom: 16 },
-                    }}
+                    onChange={setEditorCode}
                   />
                 </div>
 

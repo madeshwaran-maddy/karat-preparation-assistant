@@ -10,6 +10,7 @@ interface Candidate {
   name: string;
   email: string;
   role: string;
+  mock_enabled?: boolean;
 }
 
 export default function Round2Page() {
@@ -18,13 +19,37 @@ export default function Round2Page() {
   const router = useRouter();
 
   useEffect(() => {
-    const candidateData = localStorage.getItem("candidate");
-    if (candidateData) {
-      setCandidate(JSON.parse(candidateData));
-    } else {
-      router.push("/login");
-    }
-    setLoading(false);
+    const loadCandidate = async () => {
+      const candidateData = localStorage.getItem("candidate");
+      if (!candidateData) {
+        router.push("/login");
+        setLoading(false);
+        return;
+      }
+
+      const storedCandidate = JSON.parse(candidateData) as Candidate;
+
+      try {
+        const response = await fetch(`/api/reviewer/candidate?search=${encodeURIComponent(storedCandidate.email)}`);
+        const data = await response.json();
+        const currentCandidate = data?.candidate;
+
+        if (response.ok && currentCandidate?.id === storedCandidate.id) {
+          const refreshedCandidate = { ...storedCandidate, ...currentCandidate };
+          setCandidate(refreshedCandidate);
+          localStorage.setItem("candidate", JSON.stringify(refreshedCandidate));
+        } else {
+          setCandidate(storedCandidate);
+        }
+      } catch (error) {
+        console.error("Failed to refresh candidate details:", error);
+        setCandidate(storedCandidate);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadCandidate();
   }, [router]);
 
   if (loading) {
@@ -38,6 +63,8 @@ export default function Round2Page() {
   if (!candidate) {
     return null;
   }
+
+  const isMockEnabled = candidate.mock_enabled === true;
 
   const sections = [
     {
@@ -88,11 +115,16 @@ export default function Round2Page() {
               Practice Mock Assessment
               </button>
             </Link>
-            <Link href="/dashboard/candidate/mock-assessment" className="block">
-              <button className="w-full text-left px-4 py-3 rounded-lg font-medium text-gray-700 hover:bg-gray-100 transition duration-200">
+            <button
+              type="button"
+              onClick={() => isMockEnabled && router.push("/dashboard/candidate/mock-assessment")}
+              disabled={!isMockEnabled}
+              className={`w-full text-left px-4 py-3 rounded-lg font-medium transition duration-200 disabled:cursor-not-allowed ${
+                isMockEnabled ? "text-gray-700 hover:bg-gray-100" : "cursor-not-allowed text-gray-400"
+              }`}
+            >
               Mock Assessment
-              </button>
-            </Link>
+            </button>
           </nav>
         </div>
 

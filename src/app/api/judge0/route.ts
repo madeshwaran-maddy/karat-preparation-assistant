@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const JUDGE0_URL = "https://ce.judge0.com/submissions?base64_encoded=true&wait=false";
+const JUDGE0_URL = "https://extra-ce.judge0.com/submissions?base64_encoded=true&wait=false";
 
 function decodeBase64(value?: string) {
   if (!value) return "";
@@ -9,7 +9,7 @@ function decodeBase64(value?: string) {
 
 async function getSubmissionResult(token: string) {
   const resultResponse = await fetch(
-    `https://ce.judge0.com/submissions/${token}?base64_encoded=true&fields=*`,
+    `https://extra-ce.judge0.com/submissions/${token}?base64_encoded=true&fields=*`,
     {
       method: "GET",
       headers: {
@@ -23,7 +23,7 @@ async function getSubmissionResult(token: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { sourceCode, languageId = 62 } = await request.json();
+    const { sourceCode, languageId = 5 } = await request.json();
 
     const payload = {
       source_code: Buffer.from(String(sourceCode ?? "")).toString("base64"),

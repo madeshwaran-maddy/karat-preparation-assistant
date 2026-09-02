@@ -42,6 +42,27 @@ const categories = Object.entries(practiceGroups).map(([key, topics]) => ({
 const topics = categories.flatMap((category) => category.topics);
 const questions = topics.flatMap((topic) => topic.questions.map((question) => ({ topic, question })));
 
+const LEARNING_PROGRESS_STORAGE_KEY = "karat_learning_progress";
+
+function readStoredLearningProgress(candidateId: string) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    return storedProgress[candidateId] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredLearningProgress(candidateId: string, progress: Record<string, string>) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    storedProgress[candidateId] = progress;
+    localStorage.setItem(LEARNING_PROGRESS_STORAGE_KEY, JSON.stringify(storedProgress));
+  } catch {
+    // Ignore localStorage errors gracefully.
+  }
+}
+
 export default function PracticeQuestionsPage() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,10 +74,99 @@ export default function PracticeQuestionsPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(1);
   const router = useRouter();
 
+  const persistPracticeQuestionProgress = async (itemId: string, status: "in_progress" | "completed" | "not_started") => {
+    if (!candidate?.id) {
+      return;
+    }
+
+    const requestBody = {
+      candidateId: candidate.id,
+      round: 1,
+      module: "practice_questions",
+      itemId,
+      status,
+    };
+
+    try {
+      await fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+    } catch {
+      // Fall back silently if the API is unavailable.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidate.id);
+    storedProgress[itemId] = status;
+    writeStoredLearningProgress(candidate.id, storedProgress);
+  };
+
+  const loadPracticeQuestionProgress = async (candidateId: string) => {
+    try {
+      const response = await fetch(`/api/progress?candidateId=${encodeURIComponent(candidateId)}`);
+      const data = await response.json();
+      const backendProgress: Record<string, string> = {};
+
+      for (const item of data.items ?? []) {
+        if (item.round === 1 && item.module === "practice_questions" && item.item_id) {
+          backendProgress[item.item_id] = item.status;
+        }
+      }
+
+      if (Object.keys(backendProgress).length > 0) {
+        const completedSet = new Set(
+          Object.entries(backendProgress)
+            .filter(([, status]) => status === "completed")
+            .map(([itemId]) => itemId),
+        );
+
+        setCompletedQuestionKeys(completedSet);
+        writeStoredLearningProgress(candidateId, backendProgress);
+
+        const firstPendingQuestion = questions.find((entry) => {
+          const key = `${entry.topic.id}-${entry.question.questionNo}`;
+          const status = backendProgress[key];
+          return status === "in_progress" || (!completedSet.has(key) && status !== "completed");
+        });
+
+        if (firstPendingQuestion) {
+          setSelectedTopicId(firstPendingQuestion.topic.id);
+          setSelectedQuestionNo(firstPendingQuestion.question.questionNo);
+        }
+        return;
+      }
+    } catch {
+      // Ignore API errors and fall back to localStorage.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidateId);
+    const completedSet = new Set(
+      Object.entries(storedProgress)
+        .filter(([, status]) => status === "completed")
+        .map(([itemId]) => itemId),
+    );
+
+    setCompletedQuestionKeys(completedSet);
+
+    const firstPendingQuestion = questions.find((entry) => {
+      const key = `${entry.topic.id}-${entry.question.questionNo}`;
+      const status = storedProgress[key];
+      return status === "in_progress" || (!completedSet.has(key) && status !== "completed");
+    });
+
+    if (firstPendingQuestion) {
+      setSelectedTopicId(firstPendingQuestion.topic.id);
+      setSelectedQuestionNo(firstPendingQuestion.question.questionNo);
+    }
+  };
+
   useEffect(() => {
     const candidateData = localStorage.getItem("candidate");
     if (candidateData) {
-      setCandidate(JSON.parse(candidateData));
+      const parsedCandidate = JSON.parse(candidateData) as Candidate;
+      setCandidate(parsedCandidate);
+      void loadPracticeQuestionProgress(parsedCandidate.id);
     } else {
       router.push("/login");
     }
@@ -75,11 +185,32 @@ export default function PracticeQuestionsPage() {
     : "";
   const completed = selectedQuestionKey ? completedQuestionKeys.has(selectedQuestionKey) : false;
 
+  const getTopicStatus = (topic: PracticeTopic) => {
+    const keys = topic.questions.map((question) => `${topic.id}-${question.questionNo}`);
+    const completedCount = keys.filter((key) => completedQuestionKeys.has(key)).length;
+    const inProgress = keys.some((key) => visitedQuestionKeys.has(key) && !completedQuestionKeys.has(key));
+
+    if (completedCount === keys.length && keys.length > 0) {
+      return "completed";
+    }
+
+    if (inProgress) {
+      return "in_progress";
+    }
+
+    return "not_started";
+  };
+
+  const isQuestionCompleted = (questionKey: string) => completedQuestionKeys.has(questionKey);
+
   useEffect(() => {
     if (selectedQuestionKey) {
       setVisitedQuestionKeys((keys) => new Set(keys).add(selectedQuestionKey));
+      if (!isQuestionCompleted(selectedQuestionKey)) {
+        void persistPracticeQuestionProgress(selectedQuestionKey, "in_progress");
+      }
     }
-  }, [selectedQuestionKey]);
+  }, [selectedQuestionKey, completedQuestionKeys]);
 
   function getNextIncompleteQuestion(topic: PracticeTopic, currentQuestionNo: number, questionKeys: Set<string>) {
     const currentIndex = topic.questions.findIndex((question) => question.questionNo === currentQuestionNo);
@@ -111,13 +242,29 @@ export default function PracticeQuestionsPage() {
 
   function selectTopic(topic: PracticeTopic) {
     setSelectedTopicId(topic.id);
-    setSelectedQuestionNo(topic.questions[0]?.questionNo ?? 1);
+    const nextQuestionNo =
+      topic.questions.find((question) => !completedQuestionKeys.has(`${topic.id}-${question.questionNo}`))?.questionNo ??
+      topic.questions[0]?.questionNo ??
+      1;
+    setSelectedQuestionNo(nextQuestionNo);
     setShowBriefing(false);
+    if (candidate?.id) {
+      const key = `${topic.id}-${nextQuestionNo}`;
+      if (!isQuestionCompleted(key)) {
+        void persistPracticeQuestionProgress(key, "in_progress");
+      }
+    }
   }
 
   function selectQuestion(questionNo: number) {
     setSelectedQuestionNo(questionNo);
     setShowBriefing(false);
+    if (candidate?.id && selectedTopic) {
+      const key = `${selectedTopic.id}-${questionNo}`;
+      if (!isQuestionCompleted(key)) {
+        void persistPracticeQuestionProgress(key, "in_progress");
+      }
+    }
   }
 
   function toggleComplete() {
@@ -130,11 +277,13 @@ export default function PracticeQuestionsPage() {
 
     if (wasCompleted) {
       nextKeys.delete(selectedQuestionKey);
+      void persistPracticeQuestionProgress(selectedQuestionKey, "not_started");
       setCompletedQuestionKeys(nextKeys);
       return;
     }
 
     nextKeys.add(selectedQuestionKey);
+    void persistPracticeQuestionProgress(selectedQuestionKey, "completed");
     setCompletedQuestionKeys(nextKeys);
 
     const nextQuestion = getNextIncompleteQuestion(selectedTopic, selectedQuestionNo, nextKeys);
@@ -185,15 +334,41 @@ export default function PracticeQuestionsPage() {
                       <span aria-hidden="true">⌄</span>
                     </button>
                     <div className="mt-3 space-y-2">
-                      {category.topics.map((topic) => (
-                        <button key={topic.id} onClick={() => selectTopic(topic)} className={`w-full rounded-lg px-4 py-3 text-left transition ${selectedTopic.id === topic.id ? "border border-green-400 bg-green-100 text-green-800" : "text-gray-800 hover:bg-gray-100"}`}>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-medium">{topic.title}</span>
-                            <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">{topic.questions.length}</span>
-                          </div>
-                          {selectedTopic.id === topic.id && <span className="mt-2 block text-xs uppercase text-green-700">{completed ? "Completed" : "In progress"}</span>}
-                        </button>
-                      ))}
+                      {category.topics.map((topic) => {
+                        const topicStatus = getTopicStatus(topic);
+                        const isCompleted = topicStatus === "completed";
+                        const isInProgress = topicStatus === "in_progress";
+
+                        return (
+                          <button
+                            key={topic.id}
+                            onClick={() => selectTopic(topic)}
+                            className={`w-full rounded-lg px-4 py-3 text-left transition ${selectedTopic.id === topic.id ? "border border-green-400 bg-green-100 text-green-800" : "text-gray-800 hover:bg-gray-100"}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium">{topic.title}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">{topic.questions.length}</span>
+                                {isCompleted && (
+                                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-sm font-bold text-green-700" title="Completed">
+                                    ✓
+                                  </span>
+                                )}
+                                {!isCompleted && isInProgress && (
+                                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-700" title="In progress">
+                                    ⟳
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {selectedTopic.id === topic.id && (
+                              <span className="mt-2 block text-xs uppercase text-green-700">
+                                {completed ? "Completed" : "In progress"}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 ))}

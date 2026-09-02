@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         name: candidate.name?.S,
         email: candidate.email?.S,
         role: candidate.role?.S,
+        mock_enabled: candidate.mock_enabled?.BOOL ?? false,
       },
     });
   } catch (error) {

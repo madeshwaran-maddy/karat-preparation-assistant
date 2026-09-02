@@ -10,6 +10,7 @@ interface Candidate {
   name: string;
   email: string;
   role: string;
+  mock_enabled?: boolean;
 }
 
 export default function CandidatePage() {
@@ -19,13 +20,37 @@ export default function CandidatePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const candidateData = localStorage.getItem("candidate");
-    if (candidateData) {
-      setCandidate(JSON.parse(candidateData));
-    } else {
-      router.push("/login");
-    }
-    setLoading(false);
+    const loadCandidate = async () => {
+      const candidateData = localStorage.getItem("candidate");
+      if (!candidateData) {
+        router.push("/login");
+        setLoading(false);
+        return;
+      }
+
+      const storedCandidate = JSON.parse(candidateData) as Candidate;
+
+      try {
+        const response = await fetch(`/api/reviewer/candidate?search=${encodeURIComponent(storedCandidate.email)}`);
+        const data = await response.json();
+        const currentCandidate = data?.candidate;
+
+        if (response.ok && currentCandidate?.id === storedCandidate.id) {
+          const refreshedCandidate = { ...storedCandidate, ...currentCandidate };
+          setCandidate(refreshedCandidate);
+          localStorage.setItem("candidate", JSON.stringify(refreshedCandidate));
+        } else {
+          setCandidate(storedCandidate);
+        }
+      } catch (error) {
+        console.error("Failed to refresh candidate details:", error);
+        setCandidate(storedCandidate);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadCandidate();
   }, [router]);
 
   if (loading) {
@@ -40,6 +65,8 @@ export default function CandidatePage() {
     return null;
   }
 
+  const isMockEnabled = candidate.mock_enabled === true;
+
   const menuItems = [
     { id: "dashboard", label: "Dashboard", path: "/dashboard/candidate" },
     { id: "round1", label: "Round 1 Learning", path: "/dashboard/candidate/round1" },
@@ -49,6 +76,10 @@ export default function CandidatePage() {
   ];
 
   const handleMenuClick = (path: string, id: string) => {
+    if (id === "mock" && !isMockEnabled) {
+      return;
+    }
+
     setActiveMenu(id);
     router.push(path);
   };
@@ -65,11 +96,14 @@ export default function CandidatePage() {
               <button
                 key={item.id}
                 onClick={() => handleMenuClick(item.path, item.id)}
+                disabled={item.id === "mock" && !isMockEnabled}
                 className={`w-full text-left px-4 py-3 rounded-lg font-medium transition duration-200 ${
                   activeMenu === item.id
                     ? "bg-green-100 text-green-700 border-2 border-green-500"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
+                    : item.id === "mock" && !isMockEnabled
+                      ? "cursor-not-allowed text-gray-400"
+                      : "text-gray-700 hover:bg-gray-100"
+                } disabled:cursor-not-allowed`}
               >
                 {item.label}
               </button>
@@ -80,6 +114,14 @@ export default function CandidatePage() {
         {/* Main Content */}
         <div className="flex-1 p-8">
           <div className="max-w-5xl">
+            <div className="mb-6 flex justify-end">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100"
+              >
+                ← Back to Role Based Dashboard
+              </Link>
+            </div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
               Candidate Dashboard
             </h1>
@@ -138,8 +180,15 @@ export default function CandidatePage() {
               </Link>
 
               {/* Mock Assessment */}
-              <Link href="/dashboard/candidate/mock-assessment">
-                <div className="bg-green-50 border-2 border-green-500 rounded-xl p-8 hover:shadow-lg transition cursor-pointer">
+              <button
+                type="button"
+                onClick={() => handleMenuClick("/dashboard/candidate/mock-assessment", "mock")}
+                disabled={!isMockEnabled}
+                className="w-full text-left disabled:cursor-not-allowed"
+              >
+                <div className={`bg-green-50 border-2 border-green-500 rounded-xl p-8 transition ${
+                  isMockEnabled ? "cursor-pointer hover:shadow-lg" : "cursor-not-allowed opacity-50"
+                }`}>
                   <h2 className="text-2xl font-bold text-gray-900 mb-3">
                     Mock Assessment
                   </h2>
@@ -147,11 +196,13 @@ export default function CandidatePage() {
                     <span className="block">Actual Assessment Style</span>
                     <span className="block">Timed Questions</span>
                   </p>
-                  <button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition duration-200">
+                  <span className={`block w-full rounded-lg bg-green-600 py-3 text-center font-bold text-white transition ${
+                    isMockEnabled ? "hover:bg-green-700" : "opacity-60"
+                  }`}>
                     Start Assessment
-                  </button>
+                  </span>
                 </div>
-              </Link>
+              </button>
             </div>
           </div>
         </div>

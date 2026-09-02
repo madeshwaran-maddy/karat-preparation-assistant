@@ -26,6 +26,27 @@ interface FormatData {
   sections: Array<{ title: string; items: Array<{ label: string; value: string }> }>;
 }
 
+const LEARNING_PROGRESS_STORAGE_KEY = "karat_learning_progress";
+
+function readStoredLearningProgress(candidateId: string) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    return storedProgress[candidateId] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredLearningProgress(candidateId: string, progress: Record<string, string>) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    storedProgress[candidateId] = progress;
+    localStorage.setItem(LEARNING_PROGRESS_STORAGE_KEY, JSON.stringify(storedProgress));
+  } catch {
+    // Ignore localStorage errors gracefully.
+  }
+}
+
 export default function FormatPracticeQuestionsPage() {
   const [candidate, setCandidate] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,10 +58,124 @@ export default function FormatPracticeQuestionsPage() {
   const [formatStatus, setFormatStatus] = useState<string>("Not Started");
   const router = useRouter();
 
+  const persistRound2Progress = async (itemId: string, module: "format" | "practice_questions", status: string) => {
+    if (!candidate?.id) {
+      return;
+    }
+
+    const requestBody = {
+      candidateId: candidate.id,
+      round: 2,
+      module,
+      itemId,
+      status,
+    };
+
+    try {
+      await fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+    } catch {
+      // Ignore API errors gracefully.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidate.id);
+    storedProgress[itemId] = status;
+    writeStoredLearningProgress(candidate.id, storedProgress);
+  };
+
+  const normalizeStatus = (status?: string) => {
+    const normalized = status?.toLowerCase();
+
+    if (normalized === "completed") return "Completed";
+    if (normalized === "in_progress" || normalized === "in progress") return "In Progress";
+    if (normalized === "not_started" || normalized === "not started") return "Not Started";
+    return status ?? "Not Started";
+  };
+
+  const getFirstOpenRound2Question = () => {
+    const firstOpenQuestion = questions.find((question) => {
+      const storedProgress = readStoredLearningProgress(candidate?.id ?? "");
+      const status = normalizeStatus(storedProgress[question.id]);
+      return status !== "Completed";
+    });
+
+    return firstOpenQuestion ?? questions[0] ?? null;
+  };
+
+  const loadRound2Progress = async (candidateId: string) => {
+    try {
+      const response = await fetch(`/api/progress?candidateId=${encodeURIComponent(candidateId)}`);
+      const data = await response.json();
+      const backendProgress: Record<string, string> = {};
+
+      for (const item of data.items ?? []) {
+        if (item.round === 2 && item.module === "format" && item.item_id) {
+          backendProgress.format = item.status;
+        }
+
+        if (item.round === 2 && item.module === "practice_questions" && item.item_id) {
+          backendProgress[item.item_id] = item.status;
+        }
+      }
+
+      if (Object.keys(backendProgress).length > 0) {
+        setFormatStatus(normalizeStatus(backendProgress.format) === "Completed" ? "Completed" : "Not Started");
+
+        const nextQuestionStatuses: Record<string, string> = {};
+        questions.forEach((question) => {
+          const status = normalizeStatus(backendProgress[question.id] ?? question.status);
+          nextQuestionStatuses[question.id] = status;
+        });
+
+        setQuestionStatuses(nextQuestionStatuses);
+        writeStoredLearningProgress(candidateId, backendProgress);
+
+        const firstOpenQuestion = questions.find((question) => {
+          const status = normalizeStatus(backendProgress[question.id]);
+          return status === "In Progress" || (status !== "Completed" && !status);
+        });
+
+        if (firstOpenQuestion) {
+          setSelectedQuestion(firstOpenQuestion);
+          setSelectedTab("questions");
+        }
+        return;
+      }
+    } catch {
+      // Fallback to localStorage below.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidateId);
+    if (storedProgress.format) {
+      setFormatStatus(normalizeStatus(storedProgress.format) === "Completed" ? "Completed" : "Not Started");
+    }
+
+    const nextQuestionStatuses: Record<string, string> = {};
+    questions.forEach((question) => {
+      const status = normalizeStatus(storedProgress[question.id] ?? question.status);
+      nextQuestionStatuses[question.id] = status;
+    });
+    setQuestionStatuses(nextQuestionStatuses);
+
+    const firstOpenQuestion = questions.find((question) => {
+      const status = normalizeStatus(storedProgress[question.id]);
+      return status === "In Progress" || (status !== "Completed" && !status);
+    });
+
+    if (firstOpenQuestion) {
+      setSelectedQuestion(firstOpenQuestion);
+      setSelectedTab("questions");
+    }
+  };
+
   useEffect(() => {
     const candidateData = localStorage.getItem("candidate");
     if (candidateData) {
-      setCandidate(JSON.parse(candidateData));
+      const parsedCandidate = JSON.parse(candidateData);
+      setCandidate(parsedCandidate);
     } else {
       router.push("/login");
     }
@@ -56,7 +191,6 @@ export default function FormatPracticeQuestionsPage() {
       .then((res) => res.json())
       .then((data) => {
         setQuestions(data);
-        // Initialize statuses
         const statuses: Record<string, string> = {};
         data.forEach((q: Question) => {
           statuses[q.id] = q.status;
@@ -71,6 +205,12 @@ export default function FormatPracticeQuestionsPage() {
     setLoading(false);
   }, [router]);
 
+  useEffect(() => {
+    if (candidate?.id && questions.length > 0) {
+      void loadRound2Progress(candidate.id);
+    }
+  }, [candidate, questions]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -84,22 +224,26 @@ export default function FormatPracticeQuestionsPage() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const normalizedStatus = normalizeStatus(status);
+
+    switch (normalizedStatus) {
       case "Completed":
         return "bg-green-100 text-green-700 border-green-300";
       case "In Progress":
-        return "bg-yellow-100 text-yellow-700 border-yellow-300";
+        return "bg-orange-100 text-orange-700 border-orange-300";
       default:
         return "bg-gray-100 text-gray-600 border-gray-300";
     }
   };
 
   const getStatusBgColor = (status: string) => {
-    switch (status) {
+    const normalizedStatus = normalizeStatus(status);
+
+    switch (normalizedStatus) {
       case "Completed":
         return "border-green-500 bg-green-50";
       case "In Progress":
-        return "border-yellow-500 bg-yellow-50";
+        return "border-orange-500 bg-orange-50";
       default:
         return "border-gray-300 bg-white";
     }
@@ -107,14 +251,15 @@ export default function FormatPracticeQuestionsPage() {
 
   const handleSelectFormat = () => {
     setSelectedTab("format");
-    // Set status to "In Progress" if not already completed
     if (formatStatus !== "Completed") {
       setFormatStatus("In Progress");
+      void persistRound2Progress("format", "format", "in_progress");
     }
   };
 
   const handleMarkFormatComplete = () => {
     setFormatStatus("Completed");
+    void persistRound2Progress("format", "format", "completed");
     // Move to first question
     if (questions.length > 0) {
       const firstQuestion = questions[0];
@@ -127,36 +272,42 @@ export default function FormatPracticeQuestionsPage() {
   };
 
   const handleSelectQuestion = (question: Question) => {
+    const currentStatus = normalizeStatus(questionStatuses[question.id] || question.status);
     setSelectedQuestion(question);
     setSelectedTab("questions");
-    // Set status to "In Progress" if not already completed
-    if (questionStatuses[question.id] !== "Completed") {
+
+    if (currentStatus !== "Completed") {
       setQuestionStatuses((prev) => ({
         ...prev,
         [question.id]: "In Progress",
       }));
+      void persistRound2Progress(question.id, "practice_questions", "in_progress");
     }
   };
 
   const handleMarkAsComplete = () => {
     if (!selectedQuestion) return;
 
-    // Update status to Completed
     setQuestionStatuses((prev) => ({
       ...prev,
       [selectedQuestion.id]: "Completed",
     }));
+    void persistRound2Progress(selectedQuestion.id, "practice_questions", "completed");
 
-    // Find and move to next question
     const currentIndex = questions.findIndex((q) => q.id === selectedQuestion.id);
     if (currentIndex < questions.length - 1) {
       const nextQuestion = questions[currentIndex + 1];
       setSelectedQuestion(nextQuestion);
-      // Set next question to "In Progress"
       setQuestionStatuses((prev) => ({
         ...prev,
-        [nextQuestion.id]: "In Progress",
+        [nextQuestion.id]: normalizeStatus(prev[nextQuestion.id] || nextQuestion.status) === "Completed"
+          ? "Completed"
+          : "In Progress",
       }));
+      const nextQuestionStatus = normalizeStatus(questionStatuses[nextQuestion.id] || nextQuestion.status);
+      if (nextQuestionStatus !== "Completed") {
+        void persistRound2Progress(nextQuestion.id, "practice_questions", "in_progress");
+      }
     }
   };
 

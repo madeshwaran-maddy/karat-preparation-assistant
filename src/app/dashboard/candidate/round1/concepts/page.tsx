@@ -59,19 +59,127 @@ const categories = Object.entries(conceptGroups).map(([key, items]) => ({
 }));
 const concepts = categories.flatMap((category) => category.concepts);
 
+const LEARNING_PROGRESS_STORAGE_KEY = "karat_learning_progress";
+
+function readStoredLearningProgress(candidateId: string) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    return storedProgress[candidateId] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredLearningProgress(candidateId: string, progress: Record<string, string>) {
+  try {
+    const storedProgress = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_STORAGE_KEY) ?? "{}");
+    storedProgress[candidateId] = progress;
+    localStorage.setItem(LEARNING_PROGRESS_STORAGE_KEY, JSON.stringify(storedProgress));
+  } catch {
+    // Ignore localStorage errors gracefully.
+  }
+}
+
 export default function ConceptsPage() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState(concepts[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState("");
   const [visitedIds, setVisitedIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
 
+  const persistConceptProgress = async (conceptId: string, status: "in_progress" | "completed" | "not_started") => {
+    if (!candidate?.id) {
+      return;
+    }
+
+    const requestBody = {
+      candidateId: candidate.id,
+      round: 1,
+      module: "concepts",
+      itemId: conceptId,
+      status,
+    };
+
+    try {
+      await fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+    } catch {
+      // Fall back silently if the API is unavailable.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidate.id);
+    storedProgress[conceptId] = status;
+    writeStoredLearningProgress(candidate.id, storedProgress);
+  };
+
+  const loadConceptProgress = async (candidateId: string) => {
+    try {
+      const response = await fetch(`/api/progress?candidateId=${encodeURIComponent(candidateId)}`);
+      const data = await response.json();
+      const backendProgress: Record<string, string> = {};
+
+      for (const item of data.items ?? []) {
+        if (item.round === 1 && item.module === "concepts" && item.item_id) {
+          backendProgress[item.item_id] = item.status;
+        }
+      }
+
+      if (Object.keys(backendProgress).length > 0) {
+        const completedSet = new Set(
+          Object.entries(backendProgress)
+            .filter(([, status]) => status === "completed")
+            .map(([itemId]) => itemId),
+        );
+        setCompletedIds(completedSet);
+        writeStoredLearningProgress(candidateId, backendProgress);
+
+        const firstInProgressConcept = concepts.find(
+          (concept) =>
+            backendProgress[concept.id] === "in_progress" ||
+            (backendProgress[concept.id] !== "completed" && !completedSet.has(concept.id)),
+        );
+
+        if (firstInProgressConcept) {
+          setSelectedId(firstInProgressConcept.id);
+        }
+        return;
+      }
+    } catch {
+      // Ignore API errors and fall back to localStorage.
+    }
+
+    const storedProgress = readStoredLearningProgress(candidateId);
+    const completedSet = new Set(
+      Object.entries(storedProgress)
+        .filter(([, status]) => status === "completed")
+        .map(([itemId]) => itemId),
+    );
+    setCompletedIds(completedSet);
+
+    const firstInProgressConcept = concepts.find(
+      (concept) =>
+        storedProgress[concept.id] === "in_progress" ||
+        (storedProgress[concept.id] !== "completed" && !completedSet.has(concept.id)),
+    );
+
+    if (firstInProgressConcept) {
+      setSelectedId(firstInProgressConcept.id);
+    } else if (!selectedId && filteredConcepts.length > 0) {
+      setSelectedId(filteredConcepts[0].id);
+    }
+  };
+
   useEffect(() => {
     const candidateData = localStorage.getItem("candidate");
     if (candidateData) {
-      setCandidate(JSON.parse(candidateData));
+      const parsedCandidate = JSON.parse(candidateData) as Candidate;
+      setCandidate(parsedCandidate);
+      void loadConceptProgress(parsedCandidate.id);
     } else {
       router.push("/login");
     }
@@ -104,8 +212,11 @@ export default function ConceptsPage() {
   useEffect(() => {
     if (selectedConcept) {
       setVisitedIds((ids) => new Set(ids).add(selectedConcept.id));
+      if (!completedIds.has(selectedConcept.id)) {
+        void persistConceptProgress(selectedConcept.id, "in_progress");
+      }
     }
-  }, [selectedConcept]);
+  }, [selectedConcept, completedIds]);
 
   if (loading) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">Loading...</div>;
@@ -117,12 +228,17 @@ export default function ConceptsPage() {
 
   function toggleComplete() {
     const isCompleted = completedIds.has(selectedConcept.id);
+    const nextIds = new Set(completedIds);
 
-    setCompletedIds((ids) => {
-      const nextIds = new Set(ids);
+    if (isCompleted) {
+      nextIds.delete(selectedConcept.id);
+      void persistConceptProgress(selectedConcept.id, "not_started");
+    } else {
       nextIds.add(selectedConcept.id);
-      return nextIds;
-    });
+      void persistConceptProgress(selectedConcept.id, "completed");
+    }
+
+    setCompletedIds(nextIds);
 
     if (!isCompleted) {
       const currentIndex = concepts.findIndex((concept) => concept.id === selectedConcept.id);

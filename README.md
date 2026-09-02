@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Karat Preparation Assistant
 
-## Getting Started
+A web application for candidate interview preparation, mock assessments, coding exercises, progress tracking, and reviewer reports.
 
-First, run the development server:
+## Tech Stack
+
+- **Framework:** Next.js 16 with the App Router
+- **Language:** TypeScript
+- **UI:** React 19, Tailwind CSS 4, and Next Font (Geist)
+- **Code editor:** Monaco Editor via `@monaco-editor/react`
+- **Database:** DynamoDB through the AWS SDK for JavaScript v3
+- **Code execution:** Judge0 Extra CE for Java submissions
+- **Spreadsheet support:** SheetJS (`xlsx`)
+- **Quality tools:** ESLint 9 and the Next.js ESLint configuration
+
+## Prerequisites
+
+- Node.js 20.9 or later
+- npm
+- A DynamoDB instance for database-backed features:
+	- DynamoDB Local at `http://localhost:8000`, or
+	- An AWS DynamoDB account and credentials
+- Internet access for the Judge0 code-execution API
+
+## Project Setup
+
+Clone the repository and install dependencies:
+
+```bash
+git clone <repository-url>
+cd karat-preparation-assistant
+npm install
+```
+
+Create a `.env.local` file in the project root if you need to override the local DynamoDB defaults:
+
+```env
+AWS_REGION=ap-south-1
+DYNAMODB_ENDPOINT=http://localhost:8000
+AWS_ACCESS_KEY_ID=local
+AWS_SECRET_ACCESS_KEY=local
+```
+
+The local values above are suitable for DynamoDB Local. For AWS DynamoDB, remove `DYNAMODB_ENDPOINT` and provide valid AWS credentials using your preferred secure AWS credential configuration. Do not commit `.env.local` or credentials to source control.
+
+## Database Setup
+
+The application expects these DynamoDB tables:
+
+- `candidates`
+- `assessments`
+- `questions`
+- `evaluations`
+- `learning_progress`
+
+The table definitions and indexes are in `lib/dynamodb.ts`. The initialization route in `src/app/api/setup/route.ts` is currently disabled, so table creation must be enabled through that route or performed with a separate setup script before using database-backed workflows.
+Uncomment the code in route.ts and execute 
+https://endpoint_url.com/api/setup/route.ts in browser
+
+## Run the Project
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Available commands:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev    # Start the development server
+npm run lint   # Run ESLint
+npm run build  # Create a production build
+npm start      # Serve the production build
+```
 
-## Learn More
+To run the production server locally:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Application Areas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Candidate dashboard and preparation rounds
+- Practice and mock assessments
+- Debugging and coding exercises
+- Learning progress tracking
+- Reviewer candidate information and reports
+- Authentication API routes for login and signup

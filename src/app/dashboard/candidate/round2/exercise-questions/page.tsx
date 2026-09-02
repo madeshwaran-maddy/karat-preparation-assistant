@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Editor from "@monaco-editor/react";
 import Header from "@/components/Header";
+import JavaCodeEditor from "@/components/JavaCodeEditor";
 
 interface ExerciseQuestion {
   id: string;
@@ -29,9 +29,12 @@ export default function ExerciseQuestionsPage() {
   const [code, setCode] = useState(defaultJavaTemplate);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<string>("");
   const [status, setStatus] = useState<string>("Idle");
-  const editorRef = useRef<any>(null);
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const submitHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const questionIdMapRef = useRef<Map<string, string>>(new Map());
   const assessmentCreatedRef = useRef(false);
 
@@ -58,7 +61,7 @@ export default function ExerciseQuestionsPage() {
           difficulty: nextQuestion.difficulty,
           description: nextQuestion.description,
           code: nextQuestion.starterCode,
-          subtopic: nextQuestion.title,
+          subtopic: `Question ${nextQuestion.number}`,
           question_no: nextQuestion.number,
         }),
       });
@@ -131,6 +134,8 @@ export default function ExerciseQuestionsPage() {
       const nextQuestion = data.question ?? data.questions?.[0] ?? null;
       setQuestion(nextQuestion);
       setCode(nextQuestion?.starterCode || defaultJavaTemplate);
+      setTimeLeft(30 * 60);
+      setSubmitted(false);
       setResult("");
       setStatus("Ready");
     } catch (error) {
@@ -157,9 +162,33 @@ export default function ExerciseQuestionsPage() {
     void loadRandomQuestion();
   }, [assessmentId]);
 
+  useEffect(() => {
+    if (!assessmentId || !question || submitted) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setTimeLeft((previous) => {
+        if (previous <= 1) {
+          window.clearInterval(timer);
+          setStatus("Time expired");
+          return 0;
+        }
+        return previous - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [assessmentId, question, submitted]);
+
   const handleRun = async () => {
     if (!code.trim()) {
       setStatus("No code to run");
+      return;
+    }
+
+    if (timeLeft <= 0) {
+      setStatus("Time expired");
       return;
     }
 
@@ -170,7 +199,7 @@ export default function ExerciseQuestionsPage() {
     try {
       const submissionBody = {
         source_code: btoa(unescape(encodeURIComponent(code))),
-        language_id: 62,
+        language_id: 5,
         stdin: "",
         cpu_time_limit: 2,
         memory_limit: 512000,
@@ -178,7 +207,7 @@ export default function ExerciseQuestionsPage() {
       };
 
       const submitResponse = await fetch(
-        "https://ce.judge0.com/submissions?base64_encoded=true&wait=false",
+        "https://extra-ce.judge0.com/submissions?base64_encoded=true&wait=false",
         {
           method: "POST",
           headers: {
@@ -197,7 +226,7 @@ export default function ExerciseQuestionsPage() {
       let resultData: any = null;
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const resultResponse = await fetch(
-          `https://ce.judge0.com/submissions/${submitData.token}?base64_encoded=true&fields=*`,
+          `https://extra-ce.judge0.com/submissions/${submitData.token}?base64_encoded=true&fields=*`,
           {
             method: "GET",
             headers: {
@@ -242,25 +271,6 @@ export default function ExerciseQuestionsPage() {
       const finalOutput = decodedOutput || "Program ran successfully with no output.";
       setStatus(resultData?.status?.description || "Completed");
       setResult(finalOutput);
-
-      if (assessmentId && question && candidate) {
-        const questionId = questionIdMapRef.current.get(`${assessmentId}-${question.id}`);
-        if (questionId) {
-          await fetch("/api/evaluations", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              assessment_id: assessmentId,
-              candidate_id: candidate.id,
-              question_id: questionId,
-              user_code: code,
-              user_analysis: finalOutput,
-            }),
-          });
-        }
-      }
     } catch (error) {
       console.error(error);
       setStatus("Execution failed");
@@ -269,6 +279,66 @@ export default function ExerciseQuestionsPage() {
       setRunning(false);
     }
   };
+
+  const handleSubmit = async () => {
+    if (submitted) {
+      setStatus("Question already submitted");
+      return;
+    }
+
+    if (!assessmentId || !question || !candidate) {
+      setStatus("Assessment is not ready");
+      return;
+    }
+
+    const questionId = questionIdMapRef.current.get(`${assessmentId}-${question.id}`);
+    if (!questionId) {
+      setStatus("Question record not created yet");
+      return;
+    }
+
+    setSubmitting(true);
+    setStatus("Submitting...");
+
+    try {
+      const response = await fetch("/api/evaluations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          assessment_id: assessmentId,
+          candidate_id: candidate.id,
+          question_id: questionId,
+          user_code: code,
+          user_analysis: result || "Submitted for review",
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to submit code");
+      }
+
+      setSubmitted(true);
+      setStatus("Question submitted successfully");
+    } catch (error) {
+      console.error(error);
+      setStatus(error instanceof Error ? error.message : "Submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  submitHandlerRef.current = handleSubmit;
+
+  useEffect(() => {
+    if (timeLeft !== 0 || !question || submitted) {
+      return;
+    }
+
+    void submitHandlerRef.current();
+  }, [timeLeft, question, submitted]);
 
   const handleBackToLearning = async () => {
     if (assessmentId) {
@@ -291,11 +361,6 @@ export default function ExerciseQuestionsPage() {
     window.location.href = "/dashboard/candidate/round2";
   };
 
-  const handleEditorMount = (editor: any) => {
-    editorRef.current = editor;
-    editor.focus();
-  };
-
   return (
     <>
       <Header screenName="Exercise Questions" />
@@ -305,17 +370,12 @@ export default function ExerciseQuestionsPage() {
             <button
               type="button"
               onClick={handleBackToLearning}
-              className="inline-flex w-fit items-center rounded-full border border-gray-300 bg-white px-5 py-2.5 font-semibold text-gray-800 shadow-sm hover:bg-gray-100"
+              disabled={Boolean(question && !submitted) || submitting}
+              className="inline-flex w-fit items-center rounded-full border border-gray-300 bg-white px-5 py-2.5 font-semibold text-gray-800 shadow-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Back to Round 2 Learning
             </button>
 
-            <button
-              onClick={() => void loadRandomQuestion()}
-              className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-700"
-            >
-              Load Random Question
-            </button>
           </div>
 
           {loading ? (
@@ -325,32 +385,39 @@ export default function ExerciseQuestionsPage() {
           ) : question ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-xl font-bold text-gray-900">Java Compiler</h2>
-                  <button
-                    onClick={handleRun}
-                    disabled={running}
-                    className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {running ? "Running..." : "Run"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-800">
+                      {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")} left
+                    </span>
+                    <button
+                      onClick={handleRun}
+                      disabled={running || timeLeft <= 0}
+                      className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {running ? "Running..." : "Run Code"}
+                    </button>
+                    <button
+                      onClick={() => void handleSubmit()}
+                      disabled={submitting || timeLeft <= 0 || submitted}
+                      className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {submitting ? "Submitting..." : submitted ? "Submitted" : "Submit"}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-gray-200">
-                  <Editor
-                    height="420px"
-                    language="java"
-                    theme="vs-dark"
+                {submitted && (
+                  <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+                    Question submitted successfully
+                  </div>
+                )}
+
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-slate-900">
+                  <JavaCodeEditor
                     value={code}
-                    onMount={handleEditorMount}
-                    onChange={(value: string | undefined) => setCode(value ?? "")}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      automaticLayout: true,
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                    }}
+                    onChange={setCode}
                   />
                 </div>
 
