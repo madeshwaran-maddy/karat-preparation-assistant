@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import Header from "@/components/Header";
-
-const menuItems = [
-  { id: "dashboard", label: "Reviewer Dashboard", active: true },
-  { id: "report", label: "Candidate Report" },
-  { id: "info", label: "Candidate Information" },
-];
+import ReviewerSidebar from "@/components/ReviewerSidebar";
 
 const featureCards = [
   {
@@ -28,9 +23,18 @@ const featureCards = [
     accent: "bg-violet-500",
     href: "/dashboard/reviewer/candidate-information",
   },
+  {
+    title: "Question Manager",
+    description: "Upload and Download Questions.",
+    detail:
+      "Upload and Download questions across all the screen.",
+    icon: "questions",
+    accent: "bg-violet-500",
+    href: "/dashboard/reviewer/question-manager",
+  },
 ];
 
-function Icon({ type }: { type: "report" | "info" }) {
+function Icon({ type }: { type: "report" | "info" | "questions" }) {
   const common = "h-7 w-7 text-white";
 
   if (type === "report") {
@@ -42,10 +46,19 @@ function Icon({ type }: { type: "report" | "info" }) {
     );
   }
 
+  if (type === "info") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={common}>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 19c1.5-2.8 4.2-4.2 7-4.2s5.5 1.4 7 4.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={common}>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 19c1.5-2.8 4.2-4.2 7-4.2s5.5 1.4 7 4.2" strokeLinecap="round" />
+      <path d="M5 6.5h14M5 12h14M5 17.5h9" strokeLinecap="round" />
+      <circle cx="18" cy="17.5" r="2" />
     </svg>
   );
 }
@@ -55,51 +68,7 @@ export default function ReviewerPage() {
     <>
       <Header screenName="Lead / Reviewer Workspace" />
       <div className="flex min-h-screen bg-[#f3f4f6] text-slate-800">
-        <aside className="w-[280px] border-r border-slate-200 bg-white p-6">
-          <h2 className="mb-5 text-[1.05rem] font-semibold text-slate-800">Reviewer Menu</h2>
-          <div className="space-y-2">
-            {menuItems.map((item) => {
-              const isInfoItem = item.id === "info";
-              const isReportItem = item.id === "report";
-              const destination = isInfoItem
-                ? "/dashboard/reviewer/candidate-information"
-                : isReportItem
-                  ? "/dashboard/reviewer/candidate-report"
-                  : "/dashboard/reviewer";
-
-              return (
-                <Link key={item.id} href={destination}>
-                  <button
-                    className={`flex w-full items-center rounded-xl px-4 py-3 text-left text-base font-medium transition ${
-                      item.active
-                        ? "border border-violet-300 bg-violet-100 text-violet-700 shadow-sm"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span className={`mr-3 inline-flex h-5 w-5 items-center justify-center ${item.active ? "text-violet-700" : "text-slate-500"}`}>
-                      {item.id === "dashboard" ? (
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                          <path d="M4 4h7v7H4zm9 0h7v4h-7zm0 6h7v10h-7zm-9 3h7v7H4z" />
-                        </svg>
-                      ) : item.id === "report" ? (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-                          <path d="M8 4.5h8l3 3v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M16 4.5v3h3M8 10.5h8M8 14.5h8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-                          <circle cx="12" cy="8" r="3.5" />
-                          <path d="M5 19c1.5-2.8 4.2-4.2 7-4.2s5.5 1.4 7 4.2" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </span>
-                    {item.label}
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
-        </aside>
+        <ReviewerSidebar />
 
         <main className="flex-1 px-10 py-8">
           <div className="mx-auto max-w-5xl">
@@ -124,7 +93,7 @@ export default function ReviewerPage() {
                 <div key={title} className="rounded-2xl border border-slate-300 bg-[#f3f4f6] p-8 shadow-sm">
                   <div className="flex items-center gap-4">
                     <div className={`flex h-16 w-16 items-center justify-center rounded-xl ${accent}`}>
-                      <Icon type={icon as "report" | "info"} />
+                      <Icon type={icon as "report" | "info" | "questions"} />
                     </div>
                     <div className="text-3xl font-medium text-slate-700">{title}</div>
                   </div>

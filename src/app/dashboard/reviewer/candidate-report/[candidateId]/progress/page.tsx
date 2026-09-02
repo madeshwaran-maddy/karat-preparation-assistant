@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
+import ReviewerSidebar from "@/components/ReviewerSidebar";
 import conceptsData from "@/app/dashboard/candidate/round1/concepts/data/concepts.json";
 import practiceData from "@/app/dashboard/candidate/round1/practice-questions/data/practice-questions.json";
 
@@ -264,7 +265,7 @@ export default function CandidateProgressDashboardPage() {
     <>
       <Header screenName="Lead / Reviewer Workspace" />
       <div className="min-h-screen bg-[#f7f8fa] text-slate-700"><div className="mx-auto flex max-w-[1500px]">
-        <aside className="hidden min-h-[calc(100vh-72px)] w-[280px] shrink-0 border-r border-slate-200 bg-white px-5 py-7 lg:block"><Link href="/dashboard/reviewer" className="mb-3 block rounded-lg px-4 py-3 text-[15px] font-semibold text-slate-600 hover:bg-slate-50">▦ &nbsp; Reviewer Dashboard</Link><Link href="/dashboard/reviewer/candidate-report" className="mb-3 block rounded-lg border border-[#cbbbe8] bg-[#f0eafa] px-4 py-3 text-[15px] font-bold text-[#6845a0]">▣ &nbsp; Candidate Report</Link><Link href="/dashboard/reviewer/candidate-information" className="block rounded-lg px-4 py-3 text-[15px] font-semibold text-slate-600 hover:bg-slate-50">♟ &nbsp; Candidate Information</Link></aside>
+        <ReviewerSidebar />
         <main className="min-w-0 flex-1 px-5 py-7 sm:px-8"><div className="mb-6 flex items-center justify-between gap-4"><div><div className="text-xs font-bold tracking-[0.14em] text-slate-400 uppercase">Learning Progress</div><h1 className="mt-1 text-2xl font-bold text-slate-800">{candidate?.candidateName ?? "Candidate"}</h1></div><Link href="/dashboard/reviewer/candidate-report" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm hover:bg-slate-50">← Back to Report</Link></div>
           <div className="mb-6 grid gap-4 xl:grid-cols-3">{sections.map((section) => <SummaryCard key={section.id} section={section} selected={selectedSection?.id === section.id} onSelect={() => setSelectedSectionId(section.id)} />)}</div>
           {selectedSection && <DetailPanel section={selectedSection} />}

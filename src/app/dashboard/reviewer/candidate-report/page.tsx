@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import TablePagination from "@/components/TablePagination";
+import ReviewerSidebar from "@/components/ReviewerSidebar";
 
 const PAGE_SIZE = 10;
 
@@ -54,28 +55,7 @@ export default function CandidateReportPage() {
     <>
       <Header screenName="Lead / Reviewer Workspace" />
       <div className="flex min-h-screen bg-[#f3f4f6] text-slate-800">
-        <aside className="w-[280px] border-r border-slate-200 bg-white p-6">
-          <Link
-            href="/dashboard/reviewer"
-            className="mb-4 block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-100"
-          >
-            Reviewer Dashboard
-          </Link>
-
-          <Link
-            href="/dashboard/reviewer/candidate-report"
-            className="mb-4 block rounded-xl border border-violet-300 bg-violet-100 px-4 py-3 text-base font-medium text-violet-700 shadow-sm"
-          >
-            Candidate Report
-          </Link>
-
-          <Link
-            href="/dashboard/reviewer/candidate-information"
-            className="block rounded-xl px-4 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-100"
-          >
-            Candidate Information
-          </Link>
-        </aside>
+          <ReviewerSidebar />
 
         <main className="flex-1 px-8 py-8">
           <div className="mx-auto max-w-6xl rounded-[20px] border border-slate-300 bg-[#f3f4f6] p-8 shadow-sm">
