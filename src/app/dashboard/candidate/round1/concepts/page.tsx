@@ -30,8 +30,8 @@ interface Concept {
   detailSections: DetailSection[];
   keyConcepts: string[];
   commonMistakes: string[];
-  debuggingScenario: string[];
-  whenShouldYouUseIt: string[];
+  debuggingScenario?: string[];
+  whenShouldYouUseIt?: string[];
 }
 
 interface Candidate {
@@ -365,7 +365,7 @@ export default function ConceptsPage() {
   );
 }
 
-function ContentList({ title, items }: { title?: string; items: string[] }) {
+function ContentList({ title, items = [] }: { title?: string; items?: string[] }) {
   return (
     <section className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-6">
       {title && <h3 className="text-xl font-bold text-blue-950">{title}</h3>}

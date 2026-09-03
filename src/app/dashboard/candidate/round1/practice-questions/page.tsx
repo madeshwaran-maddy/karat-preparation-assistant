@@ -421,16 +421,20 @@ export default function PracticeQuestionsPage() {
                 <pre className="mt-4 overflow-x-auto rounded-xl bg-gray-950 p-6 text-sm leading-6 text-gray-100"><code>{selectedQuestion.buggyCode}</code></pre>
               </section>
 
-              <section className="mt-8 rounded-xl border border-green-200 bg-green-50 p-6">
-                <h4 className="text-2xl font-bold text-green-950">Answer</h4>
-                <pre className="mt-4 whitespace-pre-wrap font-sans text-lg leading-8 text-gray-800">{selectedQuestion.answer}</pre>
-                <p className="mt-5 leading-7 text-gray-700">{selectedQuestion.explanation}</p>
-              </section>
+              <details key={`answer-${selectedQuestionKey}`} className="mt-8 rounded-xl border border-green-200 bg-green-50 p-6">
+                <summary className="cursor-pointer text-2xl font-bold text-green-950">View answer and explanation</summary>
+                <div className="mt-4">
+                  <h4 className="text-lg font-bold text-green-950">Answer</h4>
+                  <pre className="mt-2 whitespace-pre-wrap font-sans text-lg leading-8 text-gray-800">{selectedQuestion.answer}</pre>
+                  <h4 className="mt-5 text-lg font-bold text-green-950">Explanation</h4>
+                  <p className="mt-2 leading-7 text-gray-700">{selectedQuestion.explanation}</p>
+                </div>
+              </details>
 
-              <section className="mt-8">
-                <h4 className="text-2xl font-bold text-gray-900">Correction</h4>
-                <p className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-5 text-gray-800">{selectedQuestion.correctedCode}</p>
-              </section>
+              <details key={`correction-${selectedQuestionKey}`} className="mt-8 rounded-xl border border-orange-200 bg-orange-50 p-6">
+                <summary className="cursor-pointer text-2xl font-bold text-orange-950">View correct Analysis</summary>
+                <p className="mt-4 whitespace-pre-wrap rounded-xl border border-orange-200 bg-white p-5 font-mono text-sm leading-6 text-gray-800">{selectedQuestion.correctedCode}</p>
+              </details>
 
               <section className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-6">
                 <h4 className="text-2xl font-bold text-gray-900">Follow-up questions</h4>
